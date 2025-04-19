@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Règles de Complot 👑</title>
+    <style>
+        /* Style pour le corps de la page */
+        body {
+            font-family: sans-serif; /* Police simple et lisible */
+            line-height: 1.6; /* Espacement entre les lignes */
+            margin: 20px; /* Marge autour du contenu */
+            background-color: #f0f0f0; /* Fond légèrement gris */
+            color: #333; /* Couleur de texte principale */
+        }
+        /* Style pour le conteneur principal */
+        .container {
+            background-color: #fff; /* Fond blanc pour le contenu */
+            padding: 25px; /* Espace intérieur */
+            border-radius: 8px; /* Coins arrondis */
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1); /* Ombre légère */
+        }
+        /* Style pour les titres */
+        h1, h2 {
+            color: #c0392b; /* Couleur rouge sombre (un peu 'complot' non ?) */
+            border-bottom: 2px solid #c0392b; /* Ligne sous les titres */
+            padding-bottom: 5px;
+        }
+        h1 { text-align: center; } /* Centre le titre principal */
+        /* Style pour les listes (rôles, actions) */
+        ul {
+            list-style: none; /* Pas de puces par défaut */
+            padding-left: 0;
+        }
+        li {
+            background-color: #ecf0f1; /* Fond gris clair pour chaque item */
+            margin-bottom: 10px; /* Espace entre les items */
+            padding: 10px; /* Espace intérieur de l'item */
+            border-left: 5px solid #3498db; /* Bordure bleue à gauche (pour le style) */
+            border-radius: 4px; /* Coins arrondis */
+        }
+        /* Style pour mettre en évidence les noms des rôles/actions */
+        strong {
+            color: #2980b9; /* Couleur bleue pour les éléments importants */
+        }
+        /* Style spécifique pour les rôles */
+        .role-duc { border-left-color: #8e44ad; } /* Violet pour Duc */
+        .role-assassin { border-left-color: #c0392b; } /* Rouge pour Assassin */
+        .role-ambassadeur { border-left-color: #27ae60; } /* Vert pour Ambassadeur */
+        .role-capitaine { border-left-color: #f39c12; } /* Orange pour Capitaine */
+        .role-contessa { border-left-color: #e74c3c; } /* Rouge clair pour Contessa */
+         /* Style pour les actions générales */
+        .action-generale { border-left-color: #7f8c8d; } /* Gris pour actions générales */
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Complot : Les Règles du Jeu 👑</h1>
+
+        <h2>🎯 But du Jeu</h2>
+        <p>Être le dernier joueur en vie ! Gardez au moins une de vos cartes Influence (face cachée) pendant que les autres perdent les leurs. Simple, non ? 😉</p>
+
+        <h2>✨ Mise en Place</h2>
+        <p>Chaque joueur reçoit 2 pièces 🪙 et 2 cartes Influence (rôles), faces cachées. Le reste des cartes forme la pioche.</p>
+
+        <h2>🎭 Les Rôles (Vos Influences Secrètes)</h2>
+        <ul>
+            <li class="role-duc"><strong>🧐 Duc :</strong> Permet de prendre <strong>3 pièces</strong> (action "Taxe"). Bloque l'<strong>Aide Étrangère</strong>.</li>
+            <li class="role-assassin"><strong>🗡️ Assassin :</strong> Permet de payer <strong>3 pièces</strong> pour forcer un joueur à perdre une influence (action "Assassiner"). Peut être bloqué par la <strong>Contessa</strong>.</li>
+            <li class="role-ambassadeur"><strong>😎 Ambassadeur :</strong> Permet d'échanger des cartes avec la pioche (action "Échange"). Bloque le <strong>Vol</strong>.</li>
+            <li class="role-capitaine"><strong>⚓ Capitaine :</strong> Permet de voler <strong>2 pièces</strong> à un autre joueur (action "Voler"). Peut être bloqué par l'<strong>Ambassadeur</strong> ou un autre <strong>Capitaine</strong>.</li>
+            <li class="role-contessa"><strong>❤️ Contessa :</strong> Ne permet pas d'action spéciale, mais bloque l'<strong>Assassinat</strong>. Votre bouclier !</li>
+        </ul>
+
+        <h2>💰 Actions Possibles à Votre Tour</h2>
+        <p>Vous devez choisir <strong>une seule</strong> action :</p>
+        <ul>
+            <li class="action-generale"><strong>Revenu :</strong> Prendre 1 pièce. (Personne ne peut contester/bloquer).</li>
+            <li class="action-generale"><strong>Aide Étrangère :</strong> Prendre 2 pièces. (Peut être bloqué par un <strong>Duc</strong>).</li>
+            <li class="action-generale"><strong>Coup d'État :</strong> Payer 7 pièces pour éliminer une influence adverse. (Imparable ! Obligatoire si vous avez 10+ pièces).</li>
+            <li>Utiliser le pouvoir d'un de vos rôles (ou bluffer !) : <strong>Taxe</strong> (Duc), <strong>Assassiner</strong> (Assassin), <strong>Échange</strong> (Ambassadeur), <strong>Voler</strong> (Capitaine).</li>
+        </ul>
+
+        <h2>🔥 Contestations et Blocages</h2>
+        <p>Quand un joueur annonce une action de rôle (ou un blocage) :</p>
+        <ul>
+            <li><strong>Contester :</strong> N'importe qui peut dire "Je conteste !". Le joueur ciblé doit prouver qu'il a la carte. S'il l'a, le contestataire perd une influence. Sinon, le bluffeur perd une influence. Celui qui a raison échange sa carte révélée avec la pioche.</li>
+            <li><strong>Bloquer :</strong> Si vous avez le rôle qui contre une action (Duc vs Aide Étrangère, Contessa vs Assassinat, etc.), vous pouvez l'annoncer. Ce blocage peut aussi être contesté !</li>
+        </ul>
+
+        <h2>☠️ Perdre une Influence</h2>
+        <p>Si vous perdez une influence (Coup d'État, Assassinat réussi, Contestation perdue), vous choisissez une de vos cartes et la révélez face visible. Elle est hors-jeu.</p>
+
+        <h2>🏆 Victoire !</h2>
+        <p>Le dernier joueur avec au moins une carte face cachée gagne ! Bravo, maître manipulateur ! 🥳</p>
+    </div>
+</body>
+</html>

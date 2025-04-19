@@ -1,0 +1,52 @@
+[
+    {
+      "id": "hint_low_coins",
+      "trigger": ["low_coins", "turn_start"],
+      "text": "Aïe, les poches sont vides ! 😬 N'oublie pas l'action 'Revenu' (1 pièce) ou tente l' 'Aide Étrangère' (2 pièces)... si personne n'a de Duc pour te bloquer !"
+    },
+    {
+      "id": "hint_assassin_threat",
+      "trigger": ["action_declare_assassinate", "target_is_player"],
+      "text": "Quelqu'un sort son Assassin ? 🗡️ Si tu as une Contessa ❤️ (ou si tu veux bluffer l'avoir !), c'est le moment de bloquer ! Sinon... serre les fesses ?"
+    },
+    {
+      "id": "hint_must_coup",
+      "trigger": ["has_10_plus_coins", "turn_start"],
+      "text": "Wow, Crésus ! 🤑 Avec 10 pièces ou plus, tu DOIS faire un 'Coup d'État' (7 pièces) à ton tour. Choisis bien ta cible ! 🎯"
+    },
+    {
+      "id": "hint_challenge_opportunity",
+      "trigger": ["action_declare_role", "player_turn_wait"],
+      "text": "Hmm, cette action te semble louche ? 🤔 Contester, c'est risqué (tu peux perdre une influence), mais ça peut démasquer un bluffeur ! À toi de sentir le coup..."
+    },
+    {
+      "id": "hint_early_bluff",
+      "trigger": ["early_game", "turn_start"],
+      "text": "Début de partie, personne ne sait qui a quoi... C'est le moment parfait pour un petit bluff audacieux ? 😉 Genre... 'Taxe avec mon Duc', même sans l'avoir ?"
+    },
+    {
+      "id": "hint_ambassador_use",
+      "trigger": ["player_has_ambassador", "turn_start"],
+      "text": "Besoin de nouvelles cartes ? L'Ambassadeur 😎 est ton ami pour échanger discrètement tes cartes avec la pioche et (peut-être) trouver le rôle qu'il te faut !"
+    },
+    {
+      "id": "hint_captain_block",
+      "trigger": ["action_declare_steal", "target_is_player"],
+      "text": "On essaie de te voler tes précieuses pièces ? 😠 Le Capitaine ⚓ ou l'Ambassadeur 😎 peuvent bloquer le vol ! Annonce-le vite (même si tu bluffes) !"
+    },
+    {
+      "id": "hint_duke_block",
+      "trigger": ["action_declare_foreign_aid", "player_turn_wait"],
+      "text": "Quelqu'un prend l'Aide Étrangère ? Si tu as le Duc 🧐 (ou si tu veux faire croire que tu l'as), tu peux bloquer et lui gâcher son tour ! 😏"
+    },
+    {
+      "id": "hint_late_game_caution",
+      "trigger": ["late_game", "one_influence_left"],
+      "text": "Attention, tu n'as plus qu'une seule influence ! 😬 Chaque décision compte. Sois prudent, un mauvais bluff ou une contestation ratée et c'est fini !"
+    },
+    {
+      "id": "hint_assassin_cost",
+      "trigger": ["player_has_assassin", "turn_start", "has_3_plus_coins"],
+      "text": "Tu as l'Assassin 🗡️ et assez de pièces ? Faire tomber une tête coûte 3 pièces. Qui sera ta prochaine victime ? 😈"
+    }
+  ]
