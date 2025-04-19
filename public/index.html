@@ -5,84 +5,33 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Complot - Rejoindre une Partie</title>
     <link rel="stylesheet" href="/style.css">
-    <style>
-        /* Styles spécifiques pour cette page si nécessaire, sinon utiliser style.css */
-        body {
-            display: flex; /* Utilise Flexbox pour centrer */
-            justify-content: center; /* Centre horizontalement */
-            align-items: center; /* Centre verticalement */
-            min-height: 100vh; /* Hauteur minimale pour remplir l'écran */
-            background-color: #34495e; /* Fond bleu-gris foncé */
-        }
-        #lobby-container {
-            background-color: #ecf0f1; /* Fond gris clair */
-            padding: 30px 40px;
-            border-radius: 8px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-            text-align: center;
-        }
-        h1 {
-            color: #c0392b; /* Rouge sombre */
-            margin-bottom: 25px;
-        }
-        .input-group {
-            margin-bottom: 20px;
-            text-align: left;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-            color: #2c3e50; /* Bleu nuit */
-            font-weight: bold;
-        }
-        input[type="text"] {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #bdc3c7; /* Bordure grise */
-            border-radius: 4px;
-            box-sizing: border-box; /* Inclut padding et bordure dans la largeur */
-        }
-        button {
-            background-color: #27ae60; /* Vert */
-            color: white;
-            padding: 12px 25px;
-            border: none;
-            border-radius: 5px;
-            font-size: 1em;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-        }
-        button:hover {
-            background-color: #2ecc71; /* Vert plus clair au survol */
-        }
-        #message-area {
-            margin-top: 20px;
-            color: #e74c3c; /* Rouge pour les erreurs/messages */
-            font-weight: bold;
-        }
-    </style>
-</head>
+    </head>
 <body>
     <div id="lobby-container">
         <h1>Rejoindre une partie de Complot 👑</h1>
-
         <div class="input-group">
             <label for="playerName">Votre Pseudo :</label>
             <input type="text" id="playerName" name="playerName" placeholder="Ex: Machiavel_du_Dimanche" required>
         </div>
-
         <div class="input-group">
             <label for="lobbyName">Nom du Lobby :</label>
             <input type="text" id="lobbyName" name="lobbyName" placeholder="Ex: partie_des_boss" required>
         </div>
-
         <button id="joinButton">Rejoindre le Lobby</button>
-
         <div id="message-area">
             </div>
-        <div id="game-area" style="display: none;">
-             <h2>Partie en cours...</h2>
-        </div>
+    </div>
+
+    <div id="game-area" style="display: none;">
+         <h2 id="lobby-title">Lobby: ...</h2> <h3>Joueurs Connectés :</h3>
+         <ul id="player-list">
+             </ul>
+         <div id="host-controls" style="display: none; margin-top: 20px;">
+            <button id="startButton">🚀 Démarrer la Partie !</button>
+         </div>
+         <div id="game-content" style="margin-top: 20px;">
+            <p>En attente du démarrage de la partie...</p>
+         </div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
