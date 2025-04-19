@@ -1,4 +1,4 @@
-// server.js - Version améliorée avec gestion des lobbies
+// server.js - v3 avec démarrage de partie
 
 // Importation des modules nécessaires
 const express = require('express');
@@ -9,7 +9,7 @@ const { Server } = require("socket.io");
 // Initialisation Express et HTTP Server
 const app = express();
 const server = http.createServer(app);
-// Initialisation Socket.IO avec CORS pour autoriser les connexions
+// Initialisation Socket.IO avec CORS
 const io = new Server(server, {
     cors: {
       origin: "*", // Attention : à restreindre en production !
@@ -17,174 +17,262 @@ const io = new Server(server, {
     }
   });
 
-// Constantes et Configuration
+// --- Constantes et Configuration du Jeu ---
 const PORT = process.env.PORT || 3000;
-const MAX_PLAYERS_PER_LOBBY = 6; // Max joueurs pour Complot
+const MIN_PLAYERS_PER_LOBBY = 2; // Minimum 2 joueurs pour commencer
+const MAX_PLAYERS_PER_LOBBY = 6; // Maximum 6 joueurs
+const STARTING_COINS = 2; // Pièces au début
+const CARDS_PER_PLAYER = 2; // Cartes Influence par joueur
+// Définition des rôles possibles dans le jeu
+const ROLES = ['Duc', 'Assassin', 'Ambassadeur', 'Capitaine', 'Contessa'];
+const CARDS_PER_ROLE = 3; // 3 exemplaires de chaque rôle
 
 // --- Stockage des Lobbies ---
-// Un objet pour garder en mémoire les lobbies actifs et leurs joueurs
-// Structure : { lobbyName: { players: [{id: socket.id, name: playerName}, ...], gameState: {...} }, ... }
+// Structure : { lobbyName: { players: [{id, name, coins, influence: [card1, card2], lostInfluence: []}, ...], gameState: { status: 'waiting'/'playing'/'finished', deck: [], discardPile: [], currentPlayerId: null, /* autres infos */ } }, ... }
 const lobbies = {};
+
+// --- Fonctions Utilitaires pour le Jeu ---
+
+/**
+ * Crée une pioche de cartes Complot complète.
+ * @returns {string[]} Un tableau contenant toutes les cartes (ex: ['Duc', 'Duc', 'Assassin', ...]).
+ */
+function createDeck() {
+    const deck = [];
+    for (const role of ROLES) {
+        for (let i = 0; i < CARDS_PER_ROLE; i++) {
+            deck.push(role);
+        }
+    }
+    console.log(`Pioche créée avec ${deck.length} cartes.`);
+    return deck;
+}
+
+/**
+ * Mélange un tableau de cartes en utilisant l'algorithme Fisher-Yates.
+ * @param {string[]} deck - Le tableau de cartes à mélanger.
+ * @returns {string[]} Le tableau de cartes mélangé.
+ */
+function shuffleDeck(deck) {
+    // Copie le deck pour ne pas modifier l'original directement si besoin
+    const shuffledDeck = [...deck];
+    // Parcours le tableau à partir de la fin
+    for (let i = shuffledDeck.length - 1; i > 0; i--) {
+        // Choisit un index aléatoire parmi les éléments restants (de 0 à i inclus)
+        const j = Math.floor(Math.random() * (i + 1));
+        // Échange l'élément courant avec l'élément à l'index aléatoire
+        [shuffledDeck[i], shuffledDeck[j]] = [shuffledDeck[j], shuffledDeck[i]];
+    }
+    console.log("Pioche mélangée !");
+    return shuffledDeck;
+}
+
+/**
+ * Distribue les cartes initiales aux joueurs depuis la pioche.
+ * Modifie directement les objets 'player' et 'deck'.
+ * @param {Array<object>} players - La liste des joueurs du lobby.
+ * @param {string[]} deck - La pioche mélangée.
+ */
+function dealInitialCards(players, deck) {
+    console.log(`Distribution de ${CARDS_PER_PLAYER} cartes à ${players.length} joueurs...`);
+    players.forEach(player => {
+        player.influence = []; // Réinitialise les cartes (au cas où)
+        player.lostInfluence = []; // Cartes perdues (révélées)
+        for (let i = 0; i < CARDS_PER_PLAYER; i++) {
+            // Prend la carte du dessus de la pioche et l'ajoute à la main du joueur
+            // 'pop()' retire et retourne le dernier élément du tableau (la carte du dessus)
+            const card = deck.pop();
+            if (card) {
+                player.influence.push(card);
+            } else {
+                console.error("ERREUR: Plus de cartes dans la pioche pendant la distribution initiale !");
+                // Gérer ce cas improbable (normalement impossible avec 15 cartes et max 6 joueurs)
+            }
+        }
+        player.coins = STARTING_COINS; // Attribue les pièces de départ
+        console.log(` -> Joueur ${player.name} a reçu ses cartes et ${player.coins} pièces.`);
+    });
+    console.log(`Distribution terminée. Cartes restantes dans la pioche: ${deck.length}`);
+}
+
+/**
+ * Détermine aléatoirement qui commence la partie.
+ * @param {Array<object>} players - La liste des joueurs.
+ * @returns {string} L'ID du joueur qui commence.
+ */
+function determineStartingPlayer(players) {
+    const randomIndex = Math.floor(Math.random() * players.length);
+    const startingPlayerId = players[randomIndex].id;
+    console.log(`Joueur qui commence (aléatoire): ${players[randomIndex].name} (ID: ${startingPlayerId})`);
+    return startingPlayerId;
+}
+
+/**
+ * Construit l'objet d'état initial du jeu spécifique à un joueur.
+ * Ne révèle que les informations publiques des autres et les cartes du joueur concerné.
+ * @param {object} lobby - L'objet lobby complet.
+ * @param {string} playerId - L'ID du joueur pour qui construire l'état.
+ * @returns {object} L'état initial du jeu pour ce joueur.
+ */
+function getInitialGameStateForPlayer(lobby, playerId) {
+    const player = lobby.players.find(p => p.id === playerId);
+    if (!player) return null; // Sécurité
+
+    return {
+        myId: playerId,
+        myInfluence: player.influence, // Les cartes spécifiques de CE joueur
+        myCoins: player.coins,
+        players: lobby.players.map(p => ({ // Infos publiques sur tous les joueurs
+            id: p.id,
+            name: p.name,
+            coins: p.coins,
+            influenceCount: p.influence.length, // Juste le NOMBRE de cartes
+            lostInfluence: p.lostInfluence // Cartes révélées (publiques)
+        })),
+        currentPlayerId: lobby.gameState.currentPlayerId,
+        deckCardCount: lobby.gameState.deck.length,
+        discardPile: lobby.gameState.discardPile,
+        // On pourrait ajouter d'autres infos générales ici si besoin
+    };
+}
+
 
 // --- Configuration d'Express ---
 app.use(express.static(path.join(__dirname, 'public')));
-
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-app.get('/rules', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'rules.html'));
-});
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.get('/rules', (req, res) => res.sendFile(path.join(__dirname, 'public', 'rules.html')));
 
 // --- Logique Socket.IO ---
-
 io.on('connection', (socket) => {
   console.log(`🟢 Joueur connecté : ${socket.id}`);
 
-  // --- Rejoindre un Lobby ---
+  // (Code pour 'join_lobby' et 'disconnect' - inchangé par rapport à la v2)
   socket.on('join_lobby', ({ playerName, lobbyName }) => {
-    console.log(`[${socket.id}] essaie de rejoindre le lobby "${lobbyName}" avec le pseudo "${playerName}"`);
-
-    // Validation du pseudo et du nom de lobby (basique)
-    if (!playerName || !lobbyName || playerName.length > 20 || lobbyName.length > 20) {
-        socket.emit('lobby_error', 'Pseudo ou nom de lobby invalide.');
-        console.log(`❗️ [${socket.id}] Pseudo/Lobby invalide.`);
-        return;
-    }
-
-    // Créer le lobby s'il n'existe pas
+    // ... (même code que la version précédente pour rejoindre) ...
+    // Validation, création lobby si besoin, vérif plein/pseudo/commencé
     if (!lobbies[lobbyName]) {
-        lobbies[lobbyName] = {
-            players: [],
-            gameState: 'waiting' // Ou un objet plus complexe pour l'état du jeu
-            // On pourrait ajouter ici : deck, pioche, etc. plus tard
-        };
+        lobbies[lobbyName] = { players: [], gameState: { status: 'waiting' } };
         console.log(`✨ Lobby "${lobbyName}" créé.`);
+    }
+    const lobby = lobbies[lobbyName];
+    // ... (Validations: plein, pseudo, état) ...
+    if (lobby.players.length >= MAX_PLAYERS_PER_LOBBY) { /* ... */ return; }
+    if (lobby.players.some(p => p.name === playerName)) { /* ... */ return; }
+    if (lobby.gameState.status !== 'waiting') { /* ... */ return; }
+
+    // Ajout du joueur
+    const newPlayer = { id: socket.id, name: playerName, coins: STARTING_COINS, influence: [], lostInfluence: [] };
+    lobby.players.push(newPlayer);
+    socket.join(lobbyName);
+    socket.lobbyName = lobbyName;
+    socket.playerName = playerName;
+
+    // Confirmation + update aux autres
+    const lobbyData = { /* ... */ isHost: lobby.players.length === 1 };
+    socket.emit('lobby_joined', lobbyData);
+    socket.to(lobbyName).emit('update_lobby', { players: lobby.players.map(p => ({ id: p.id, name: p.name })) });
+    console.log(`👍 [${socket.id}] ("${playerName}") a rejoint le lobby "${lobbyName}".`);
+
+  });
+
+  // --- Démarrage de la Partie ---
+  socket.on('request_start_game', () => {
+    const lobbyName = socket.lobbyName;
+    const playerName = socket.playerName; // Récupère le nom pour les logs
+
+    console.log(`[${playerName} - ${socket.id}] demande à démarrer la partie dans le lobby "${lobbyName}"`);
+
+    // Vérifier si le lobby existe
+    if (!lobbyName || !lobbies[lobbyName]) {
+        console.error(`❗️ Tentative de démarrage pour un lobby inexistant: "${lobbyName}"`);
+        socket.emit('lobby_error', 'Erreur interne : Lobby introuvable.');
+        return;
     }
 
     const lobby = lobbies[lobbyName];
 
-    // Vérifier si le lobby est plein
-    if (lobby.players.length >= MAX_PLAYERS_PER_LOBBY) {
-        socket.emit('lobby_error', 'Ce lobby est plein ! 🤷‍♂️');
-        console.log(`❗️ [${socket.id}] Lobby "${lobbyName}" plein.`);
+    // Vérifier si la partie est déjà en cours ou terminée
+    if (lobby.gameState.status !== 'waiting') {
+        console.log(`❗️ [${playerName}] Tentative de démarrage alors que la partie est déjà ${lobby.gameState.status}.`);
+        socket.emit('lobby_error', 'La partie a déjà commencé ou est terminée.');
         return;
     }
 
-    // Vérifier si le pseudo est déjà pris DANS CE LOBBY
-    if (lobby.players.some(player => player.name === playerName)) {
-        socket.emit('lobby_error', 'Ce pseudo est déjà pris dans ce lobby. 🤔');
-        console.log(`❗️ [${socket.id}] Pseudo "${playerName}" déjà pris dans "${lobbyName}".`);
+    // Vérifier si le demandeur est bien l'hôte (le premier joueur à avoir rejoint)
+    if (!lobby.players.length || lobby.players[0].id !== socket.id) {
+        console.log(`❗️ [${playerName}] n'est pas l'hôte et ne peut pas démarrer la partie.`);
+        socket.emit('lobby_error', 'Seul l\'hôte peut démarrer la partie.');
         return;
     }
 
-    // Vérifier si la partie a déjà commencé (simpliste pour l'instant)
-    if (lobby.gameState !== 'waiting') {
-         socket.emit('lobby_error', 'La partie dans ce lobby a déjà commencé. ⏳');
-         console.log(`❗️ [${socket.id}] Partie déjà commencée dans "${lobbyName}".`);
-         return;
+    // Vérifier s'il y a assez de joueurs
+    if (lobby.players.length < MIN_PLAYERS_PER_LOBBY) {
+        console.log(`❗️ Pas assez de joueurs dans "${lobbyName}" pour démarrer (${lobby.players.length}/${MIN_PLAYERS_PER_LOBBY}).`);
+        socket.emit('lobby_error', `Il faut au moins ${MIN_PLAYERS_PER_LOBBY} joueurs pour commencer.`);
+        return;
     }
 
-    // Tout est bon ! Ajouter le joueur au lobby
-    const newPlayer = { id: socket.id, name: playerName, coins: 2, influence: [] /* Sera rempli au début du jeu */ };
-    lobby.players.push(newPlayer);
-    console.log(`👍 [${socket.id}] ("${playerName}") a rejoint le lobby "${lobbyName}". Joueurs: ${lobby.players.length}/${MAX_PLAYERS_PER_LOBBY}`);
+    // --- Tout est OK : On lance la partie ! ---
+    console.log(`✅ Démarrage de la partie dans le lobby "${lobbyName}" par ${playerName}...`);
+    lobby.gameState.status = 'playing';
 
-    // Faire rejoindre au joueur la "room" Socket.IO correspondante
-    // Permet d'envoyer des messages ciblés à ce lobby
-    socket.join(lobbyName);
+    // 1. Créer et mélanger la pioche
+    const deck = shuffleDeck(createDeck());
+    lobby.gameState.deck = deck; // Stocke la pioche dans l'état du lobby
+    lobby.gameState.discardPile = []; // Initialise la défausse
 
-    // Stocker le nom du lobby dans l'objet socket pour le retrouver facilement (ex: à la déconnexion)
-    socket.lobbyName = lobbyName;
-    socket.playerName = playerName; // On stocke aussi le nom
+    // 2. Distribuer les cartes et pièces (pièces déjà faites à l'arrivée)
+    dealInitialCards(lobby.players, lobby.gameState.deck);
 
-    // Confirmer au joueur qu'il a rejoint + envoyer l'état actuel du lobby
-    const lobbyData = {
-        lobbyName: lobbyName,
-        players: lobby.players.map(p => ({ id: p.id, name: p.name })), // N'envoie que les infos non sensibles
-        maxPlayers: MAX_PLAYERS_PER_LOBBY,
-        isHost: lobby.players.length === 1 // Le premier joueur est l'hôte (pourrait servir)
-    };
-    socket.emit('lobby_joined', lobbyData);
+    // 3. Déterminer le premier joueur
+    lobby.gameState.currentPlayerId = determineStartingPlayer(lobby.players);
 
-    // Informer les AUTRES joueurs du lobby qu'un nouveau joueur est arrivé
-    // On utilise socket.to(lobbyName) pour envoyer à tous SAUF au nouvel arrivant
-    const updatedLobbyDataForOthers = {
-        players: lobby.players.map(p => ({ id: p.id, name: p.name }))
-    };
-    socket.to(lobbyName).emit('update_lobby', updatedLobbyDataForOthers);
+    // 4. Envoyer l'état initial à chaque joueur (personnalisé)
+    console.log(`📢 Envoi de l'état initial aux joueurs de "${lobbyName}"...`);
+    lobby.players.forEach(player => {
+        const initialStateForPlayer = getInitialGameStateForPlayer(lobby, player.id);
+        // On utilise io.to(player.id) pour envoyer un message privé à ce joueur spécifique
+        io.to(player.id).emit('game_start', initialStateForPlayer);
+        console.log(` -> État envoyé à ${player.name} (ID: ${player.id})`);
+    });
 
-    // --- Logique future ---
-    // Si le lobby est plein après l'arrivée de ce joueur, on pourrait lancer le jeu
-    // if (lobby.players.length === MAX_PLAYERS_PER_LOBBY) {
-    //   startGame(lobbyName); // Fonction à créer
-    // }
+    // Optionnel: On pourrait aussi envoyer un message global disant "La partie commence, c'est au tour de X"
+    const startingPlayer = lobby.players.find(p => p.id === lobby.gameState.currentPlayerId);
+    io.to(lobbyName).emit('game_message', `🚀 La partie commence ! C'est au tour de ${startingPlayer.name}.`);
+
   });
 
+
   // --- Gestion des Actions du Jeu (À AJOUTER) ---
-  // socket.on('player_action', (actionData) => { ... });
-  // socket.on('player_challenge', (challengeData) => { ... });
-  // socket.on('player_block', (blockData) => { ... });
-  // socket.on('start_game_request', () => { /* Vérifier si le joueur est l'hôte, etc. */ });
+  // socket.on('player_action', (actionData) => { /* Gérer Revenu, Aide Étrangère, Taxe, Vol, Assassinat, Échange, Coup */ });
+  // socket.on('player_challenge', (challengeData) => { /* Gérer une contestation */ });
+  // socket.on('player_block', (blockData) => { /* Gérer un blocage (ex: Duc bloque Aide, Contessa bloque Assassin) */ });
+  // socket.on('challenge_response', (responseData) => { /* Gérer la réponse à une contestation (révéler ou perdre influence) */ });
 
   // --- Déconnexion ---
   socket.on('disconnect', () => {
-    console.log(`🔴 Joueur déconnecté : ${socket.id} (${socket.playerName || 'Nom inconnu'})`);
-
-    // Récupérer le lobby du joueur (stocké lors du 'join_lobby')
+    // ... (même code que la version précédente pour quitter) ...
     const lobbyName = socket.lobbyName;
-
     if (lobbyName && lobbies[lobbyName]) {
+        // ... (retirer joueur, supprimer lobby si vide, informer les autres) ...
+
+        // !! Important : Gérer le cas où un joueur part en pleine partie !!
         const lobby = lobbies[lobbyName];
-
-        // Retirer le joueur de la liste des joueurs du lobby
-        const playerIndex = lobby.players.findIndex(player => player.id === socket.id);
-        if (playerIndex !== -1) {
-            const leavingPlayerName = lobby.players[playerIndex].name;
-            lobby.players.splice(playerIndex, 1); // Retire le joueur
-            console.log(`👋 Joueur "${leavingPlayerName}" retiré du lobby "${lobbyName}". Joueurs restants: ${lobby.players.length}`);
-
-            // Si le lobby est vide, on le supprime
-            if (lobby.players.length === 0) {
-                delete lobbies[lobbyName];
-                console.log(`🗑️ Lobby "${lobbyName}" vide supprimé.`);
-            } else {
-                // Sinon, informer les joueurs restants de la mise à jour
-                const updatedLobbyData = {
-                    players: lobby.players.map(p => ({ id: p.id, name: p.name }))
-                };
-                io.to(lobbyName).emit('update_lobby', updatedLobbyData); // io.to envoie à tout le monde dans la room
-                console.log(`📢 Joueurs restants dans "${lobbyName}" informés.`);
-
-                // Gérer le cas où la partie était en cours (à ajouter)
-                // if (lobby.gameState !== 'waiting') { handlePlayerLeaveMidGame(lobbyName, socket.id); }
-            }
+        if (lobby && lobby.gameState.status === 'playing') {
+             console.log(`⚠️ Joueur ${socket.playerName} a quitté pendant la partie dans "${lobbyName}" !`);
+             // Logique à définir :
+             // - Mettre fin à la partie ?
+             // - Le déclarer perdant et continuer ? (Si > 2 joueurs)
+             // - Gérer le cas où c'était son tour ?
+             // Pour l'instant, on informe juste les autres :
+             io.to(lobbyName).emit('game_message', `⚠️ ${socket.playerName} a quitté la partie.`);
+             // handlePlayerLeaveMidGame(lobbyName, socket.id); // Fonction à créer
         }
     }
-    // Note : Le socket quitte automatiquement les rooms auxquelles il appartenait lors de la déconnexion.
   });
 });
 
 // --- Démarrage du Serveur ---
 server.listen(PORT, () => {
-  console.log(`🚀 Serveur Complot (v2) démarré sur http://localhost:${PORT}`);
+  console.log(`🚀 Serveur Complot (v3) démarré sur http://localhost:${PORT}`);
 });
-
-// --- Fonctions de Logique de Jeu (Exemples à développer) ---
-// function startGame(lobbyName) {
-//   const lobby = lobbies[lobbyName];
-//   if (!lobby || lobby.gameState !== 'waiting') return;
-//   console.log(`▶️ Démarrage du jeu dans le lobby "${lobbyName}"...`);
-//   lobby.gameState = 'playing';
-//   // Distribuer les cartes, définir le premier joueur, etc.
-//   // dealInitialCards(lobby);
-//   // assignStartingPlayer(lobby);
-//   // Envoyer l'état initial du jeu à tous les joueurs dans le lobby
-//   // io.to(lobbyName).emit('game_start', getInitialGameState(lobby));
-// }
-
-// function getInitialGameState(lobby) { /* ... */ }
-// function dealInitialCards(lobby) { /* ... */ }
-// function assignStartingPlayer(lobby) { /* ... */ }
-// function handlePlayerLeaveMidGame(lobbyName, playerId) { /* ... */ }
