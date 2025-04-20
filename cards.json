@@ -1,0 +1,95 @@
+{
+    "roles": [
+      {
+        "id": "duke",
+        "name": "Duc",
+        "actionDescription": "Prendre 3 pièces (Taxe)",
+        "actionType": "TAX",
+        "blockDescription": "Bloque l'Aide Étrangère",
+        "blockType": "BLOCK_FOREIGN_AID",
+        "counteredByDescription": null,
+        "counteredByType": null,
+        "countInDeck": 3,
+        "color": "#8e44ad",
+        "imageUrl": "/images/cards/duke.png"
+      },
+      {
+        "id": "assassin",
+        "name": "Assassin",
+        "actionDescription": "Payer 3 pièces pour assassiner",
+        "actionType": "ASSASSINATE",
+        "blockDescription": null,
+        "blockType": null,
+        "counteredByDescription": "Peut être bloqué par la Contessa",
+        "counteredByType": "contessa",
+        "countInDeck": 3,
+        "color": "#c0392b",
+        "imageUrl": "/images/cards/assassin.png"
+      },
+      {
+        "id": "ambassador",
+        "name": "Ambassadeur",
+        "actionDescription": "Échanger des cartes avec la pioche",
+        "actionType": "EXCHANGE",
+        "blockDescription": "Bloque le Vol",
+        "blockType": "BLOCK_STEAL",
+        "counteredByDescription": null,
+        "counteredByType": null,
+        "countInDeck": 3,
+        "color": "#27ae60",
+        "imageUrl": "/images/cards/ambassador.png"
+      },
+      {
+        "id": "captain",
+        "name": "Capitaine",
+        "actionDescription": "Voler 2 pièces",
+        "actionType": "STEAL",
+        "blockDescription": "Bloque le Vol (par un autre Capitaine)",
+        "blockType": "BLOCK_STEAL",
+        "counteredByDescription": "Peut être bloqué par Ambassadeur ou Capitaine",
+        "counteredByType": ["ambassador", "captain"],
+        "countInDeck": 3,
+        "color": "#f39c12",
+        "imageUrl": "/images/cards/captain.png"
+      },
+      {
+        "id": "contessa",
+        "name": "Contessa",
+        "actionDescription": null,
+        "actionType": null,
+        "blockDescription": "Bloque l'Assassinat",
+        "blockType": "BLOCK_ASSASSINATION",
+        "counteredByDescription": null,
+        "counteredByType": null,
+        "countInDeck": 3,
+        "color": "#e74c3c",
+        "imageUrl": "/images/cards/contessa.png"
+      }
+    ],
+    "generalActions": [
+      {
+        "id": "income",
+        "name": "Revenu",
+        "description": "Prendre 1 pièce",
+        "cost": 0,
+        "blockable": false
+      },
+      {
+        "id": "foreign_aid",
+        "name": "Aide Étrangère",
+        "description": "Prendre 2 pièces",
+        "cost": 0,
+        "blockable": true,
+        "blockedByType": "duke"
+      },
+      {
+        "id": "coup",
+        "name": "Coup d'État",
+        "description": "Payer 7 pièces pour éliminer une influence",
+        "cost": 7,
+        "blockable": false,
+        "mustActionCoinThreshold": 10
+      }
+    ]
+  }
+  
