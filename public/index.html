@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Complot - Rejoindre une Partie</title>
+    <title>Complot - Le Jeu</title>
     <link rel="stylesheet" href="/style.css">
-    </head>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
 <body>
     <div id="lobby-container">
         <h1>Rejoindre une partie de Complot 👑</h1>
@@ -23,15 +24,58 @@
     </div>
 
     <div id="game-area" style="display: none;">
-         <h2 id="lobby-title">Lobby: ...</h2> <h3>Joueurs Connectés :</h3>
-         <ul id="player-list">
-             </ul>
-         <div id="host-controls" style="display: none; margin-top: 20px;">
-            <button id="startButton">🚀 Démarrer la Partie !</button>
-         </div>
-         <div id="game-content" style="margin-top: 20px;">
-            <p>En attente du démarrage de la partie...</p>
-         </div>
+
+        <div id="opponents-area">
+            </div>
+
+        <div id="table-area">
+            <div id="deck-info">
+                Pioche : <span id="deck-count">X</span> cartes
+            </div>
+            <div id="discard-pile">
+                Défausse : <span id="discard-top-card">Aucune</span>
+                 </div>
+            <div id="current-action-prompt">
+                <p id="game-prompt-message">En attente...</p>
+                <div id="reaction-buttons" style="display: none;">
+                    <button id="challenge-button">Contester !</button>
+                    <button id="block-button">Bloquer !</button>
+                    </div>
+            </div>
+        </div>
+
+        <div id="player-area">
+            <div id="player-info">
+                <span id="my-player-name">Votre Nom</span>
+                <span id="my-coins"><i class="fas fa-coins"></i> <span class="coin-count">X</span></span>
+            </div>
+            <div id="my-cards">
+                </div>
+        </div>
+
+        <div id="action-buttons">
+            <button class="action-btn" data-action="income" title="Revenu: Prendre 1 pièce">Revenu <i class="fas fa-coins"></i>1</button>
+            <button class="action-btn" data-action="foreign_aid" title="Aide Étrangère: Prendre 2 pièces (peut être bloqué)">Aide Étr. <i class="fas fa-coins"></i>2</button>
+            <button class="action-btn" data-action="coup" title="Coup d'État: Payer 7 pièces pour éliminer une influence">Coup (7<i class="fas fa-coins"></i>)</button>
+            <hr>
+            <button class="action-btn role-action" data-action="TAX" title="Taxe (Duc): Prendre 3 pièces">Taxe</button>
+            <button class="action-btn role-action" data-action="ASSASSINATE" title="Assassiner (Assassin/Bourreau/Maître-Chanteur): Payer 3 pour éliminer">Assassiner</button>
+            <button class="action-btn role-action" data-action="STEAL" title="Voler (Capitaine): Voler 2 pièces">Voler</button>
+            <button class="action-btn role-action" data-action="EXCHANGE" title="Échange (Ambassadeur): Échanger avec la pioche">Échange</button>
+            <button class="action-btn role-action" data-action="EXTORT" title="Extorquer (Pape): Voler 1 pièce à tous">Extorquer</button>
+             <button class="action-btn role-action" data-action="REDISTRIBUTE" title="Redistribuer (Justicier): Voler 3 au riche, donner 2 au pauvre">Redistribuer</button>
+             <button class="action-btn role-action" data-action="COLLECT_TAX" title="Percevoir (Ursuline): Prendre 3, donner 1">Percevoir</button>
+             <button class="action-btn role-action" data-action="ILLUSION" title="Illusion (Illusionniste): Prendre 4 (moins si d'autres annoncent)">Illusion</button>
+             <button class="action-btn role-action" data-action="SPY_EXCHANGE" title="Espionner (Espion): Échanger 1 carte (répétable pour 1 pièce)">Espionner</button>
+
+        </div>
+
+        <div id="game-log">
+            <h4>Journal de Jeu</h4>
+            <ul id="log-list">
+                </ul>
+        </div>
+
     </div>
 
     <script src="/socket.io/socket.io.js"></script>

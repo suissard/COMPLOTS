@@ -1,111 +1,304 @@
-/* public/style.css */
+/* public/style.css - v2 avec styles pour l'interface de jeu */
 
-/* Style global pour le corps */
+/* --- Styles Globaux & Lobby (Peu modifiés) --- */
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    margin: 0; /* Enlève les marges par défaut */
-    display: flex; /* Utilise Flexbox pour centrer */
-    justify-content: center; /* Centre horizontalement */
-    align-items: center; /* Centre verticalement */
-    min-height: 100vh; /* Hauteur minimale pour remplir l'écran */
-    background-color: #34495e; /* Fond bleu-gris foncé */
-    color: #333;
+    margin: 0;
+    background-color: #2c3e50; /* Fond général plus sombre */
+    color: #ecf0f1; /* Texte clair par défaut */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-size: 14px; /* Taille de police de base */
+    overflow: hidden; /* Empêche le body de scroller si le jeu est grand */
 }
 
-/* Conteneur principal (pour le lobby, puis pour le jeu) */
-#lobby-container, #game-container { /* Ajout de #game-container pour plus tard */
-    background-color: #ecf0f1; /* Fond gris clair */
+#lobby-container {
+    background-color: #ecf0f1;
+    color: #333; /* Texte sombre pour le lobby */
     padding: 30px 40px;
     border-radius: 8px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
     text-align: center;
-    max-width: 400px; /* Largeur maximale pour le formulaire */
-    width: 90%; /* Prend 90% de la largeur disponible */
+    max-width: 400px;
+    width: 90%;
+    /* S'assure que le lobby est bien caché quand le jeu est visible */
+    /* display: block; */ /* Géré par JS maintenant */
 }
 
-/* Titres */
-h1 {
-    color: #c0392b; /* Rouge sombre */
-    margin-top: 0; /* Enlève la marge haute par défaut */
-    margin-bottom: 25px;
-    font-size: 1.8em;
+#lobby-container h1 { color: #c0392b; margin-top: 0; margin-bottom: 25px; font-size: 1.8em; }
+.input-group { margin-bottom: 20px; text-align: left; }
+label { display: block; margin-bottom: 5px; color: #2c3e50; font-weight: bold; }
+input[type="text"] { width: 100%; padding: 12px; border: 1px solid #bdc3c7; border-radius: 4px; box-sizing: border-box; font-size: 1em; }
+input[type="text"]:focus { outline: none; border-color: #3498db; box-shadow: 0 0 5px rgba(52, 152, 219, 0.5); }
+#lobby-container button { background-color: #27ae60; color: white; padding: 12px 25px; border: none; border-radius: 5px; font-size: 1.1em; cursor: pointer; transition: background-color 0.3s ease, transform 0.1s ease; width: 100%; margin-top: 10px; }
+#lobby-container button:hover { background-color: #2ecc71; }
+#lobby-container button:active { transform: scale(0.98); }
+#message-area { margin-top: 20px; color: #e74c3c; font-weight: bold; min-height: 1.2em; }
+
+
+/* --- Styles pour la Zone de Jeu (#game-area) --- */
+#game-area {
+    /* display: none; */ /* Initialement caché, géré par JS */
+    display: grid; /* Utilisation de CSS Grid */
+    grid-template-areas: /* Définit la disposition des zones */
+        "opponents opponents opponents"
+        "log       table       actions"
+        "log       player      actions";
+    grid-template-columns: 200px 1fr 200px; /* Colonnes: Log(fixe) | Table(flexible) | Actions(fixe) */
+    grid-template-rows: auto 1fr auto; /* Lignes: Adversaires | Table/Player | Player */
+    width: 95vw; /* Largeur quasi totale */
+    height: 95vh; /* Hauteur quasi totale */
+    max-width: 1400px; /* Largeur max augmentée */
+    max-height: 900px; /* Hauteur max augmentée */
+    background-color: #34495e; /* Fond un peu plus clair que le body */
+    border: 1px solid #7f8c8d;
+    border-radius: 10px;
+    padding: 15px;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+    gap: 15px; /* Espace entre les zones */
+    box-sizing: border-box;
 }
 
-/* Groupes de champs de saisie */
-.input-group {
-    margin-bottom: 20px;
-    text-align: left;
+/* --- Placement des Zones --- */
+#opponents-area { grid-area: opponents; }
+#table-area     { grid-area: table; }
+#player-area    { grid-area: player; }
+#action-buttons { grid-area: actions; }
+#game-log       { grid-area: log; }
+
+/* --- Styles des Zones --- */
+#opponents-area, #table-area, #player-area, #action-buttons, #game-log {
+    background-color: rgba(44, 62, 80, 0.8); /* Fond sombre semi-transparent */
+    border-radius: 6px;
+    padding: 10px;
+    box-sizing: border-box;
+    overflow: hidden; /* Cache le débordement par défaut */
+    display: flex; /* Utilisation de flex pour la plupart des zones */
+    flex-direction: column; /* Direction par défaut */
 }
 
-/* Étiquettes des champs */
-label {
-    display: block;
-    margin-bottom: 5px;
-    color: #2c3e50; /* Bleu nuit */
-    font-weight: bold;
+/* Zone Adversaires */
+#opponents-area {
+    flex-direction: row; /* Dispose les adversaires en ligne */
+    flex-wrap: wrap;
+    justify-content: space-around;
+    align-items: flex-start; /* Aligne en haut */
+    padding-bottom: 5px;
+    border-bottom: 1px solid #7f8c8d;
+    min-height: 80px; /* Hauteur minimale pour voir les cartes */
 }
-
-/* Champs de saisie */
-input[type="text"] {
-    width: 100%;
-    padding: 12px; /* Un peu plus de padding */
-    border: 1px solid #bdc3c7; /* Bordure grise */
+.opponent {
+    border: 1px solid #7f8c8d;
     border-radius: 4px;
-    box-sizing: border-box; /* Inclut padding et bordure dans la largeur */
+    padding: 5px 8px;
+    margin: 5px;
+    background-color: #2c3e50;
+    min-width: 130px; /* Légèrement plus large */
+    text-align: center;
+    transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+.opponent.current-turn {
+    box-shadow: 0 0 10px 3px #f1c40f;
+    border-color: #f1c40f;
+}
+.opponent.targeted { /* Style si ciblé par une action */
+     box-shadow: 0 0 10px 3px #e74c3c;
+     border-color: #e74c3c;
+}
+.opponent-name { font-weight: bold; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.opponent-coins, .opponent-cards-container { font-size: 0.9em; margin-top: 4px; }
+.opponent-cards-container { /* Conteneur pour les cartes cachées et révélées */
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap; /* Permet aux cartes révélées de passer à la ligne */
+    gap: 3px;
+    min-height: 45px; /* Espace même si pas de cartes révélées */
+}
+.current-turn-indicator { display: none; } /* Caché par défaut, affiché via classe .current-turn */
+.opponent.current-turn .current-turn-indicator { display: inline; font-weight: normal; font-style: italic; color: #f1c40f; margin-left: 5px; }
+
+/* Zone Table (Pioche, Défausse, Prompt) */
+#table-area {
+    justify-content: center; /* Centre verticalement */
+    align-items: center;
+    text-align: center;
+    gap: 15px;
+}
+#deck-info, #discard-pile { font-size: 1em; } /* Taille normale */
+#discard-pile img { /* Style pour l'image de la carte défaussée */
+    height: 60px; /* Petite image */
+    border-radius: 3px;
+    border: 1px solid #7f8c8d;
+    vertical-align: middle; /* Aligne avec le texte */
+    margin-left: 5px;
+}
+#current-action-prompt {
+    background-color: rgba(0, 0, 0, 0.2);
+    padding: 15px;
+    border-radius: 5px;
+    min-height: 80px; /* Plus de hauteur */
+    width: 90%; /* Plus large */
+    display: flex; /* Utilise flex pour centrer */
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+#game-prompt-message { margin: 0 0 10px 0; font-weight: bold; font-size: 1.2em; }
+#reaction-buttons { margin-top: 10px; }
+#reaction-buttons button {
+    margin: 0 10px;
+    padding: 10px 15px;
     font-size: 1em;
-}
-
-input[type="text"]:focus {
-    outline: none;
-    border-color: #3498db; /* Bordure bleue au focus */
-    box-shadow: 0 0 5px rgba(52, 152, 219, 0.5); /* Ombre légère bleue */
-}
-
-/* Boutons */
-button {
-    background-color: #27ae60; /* Vert */
     color: white;
-    padding: 12px 25px;
     border: none;
     border-radius: 5px;
-    font-size: 1.1em; /* Légèrement plus grand */
     cursor: pointer;
-    transition: background-color 0.3s ease, transform 0.1s ease; /* Ajout transition transform */
-    width: 100%; /* Prend toute la largeur */
-    margin-top: 10px; /* Espace au-dessus */
+    transition: background-color 0.2s ease;
+}
+#challenge-button { background-color: #e74c3c; } /* Rouge */
+#challenge-button:hover { background-color: #c0392b; }
+#block-button { background-color: #3498db; } /* Bleu */
+#block-button:hover { background-color: #2980b9; }
+
+
+/* Zone Joueur (Main, Pièces) */
+#player-area {
+    justify-content: center; /* Centre le contenu */
+    align-items: center;
+    gap: 15px; /* Plus d'espace */
+    border-top: 1px solid #7f8c8d;
+    padding-top: 15px;
+}
+#player-info { font-size: 1.2em; font-weight: bold; }
+#my-coins .coin-count { color: #f1c40f; margin-left: 3px; }
+#my-cards {
+    display: flex;
+    justify-content: center;
+    gap: 15px; /* Plus d'espace entre les cartes */
 }
 
-button:hover {
-    background-color: #2ecc71; /* Vert plus clair au survol */
-}
-
-button:active {
-    transform: scale(0.98); /* Effet d'enfoncement au clic */
-}
-
-/* Zone pour les messages d'erreur ou d'information */
-#message-area {
-    margin-top: 20px;
-    color: #e74c3c; /* Rouge pour les erreurs */
-    font-weight: bold;
-    min-height: 1.2em; /* Réserve un peu d'espace même si vide */
-}
-
-/* Zone de jeu (initialement cachée) */
-#game-area {
-    display: none; /* Caché par défaut */
-    margin-top: 30px;
-    text-align: left; /* Aligner le contenu du jeu à gauche */
-    /* D'autres styles pour le jeu viendront ici */
-}
-
-#game-area h2 {
+/* Styles des Cartes (Générique) */
+.card {
+    border: 2px solid #bdc3c7; /* Bordure plus visible */
+    border-radius: 8px; /* Plus arrondi */
+    width: 90px; /* Plus large */
+    height: 130px; /* Plus haut */
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between; /* Espace entre image et nom */
+    align-items: center;
     text-align: center;
-    color: #2980b9; /* Bleu */
+    background-color: #ecf0f1;
+    color: #333;
+    font-size: 0.9em;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    cursor: default; /* Curseur par défaut */
+}
+.card.selectable:hover { /* Style si la carte est sélectionnable (ex: échange) */
+    transform: translateY(-5px);
+    box-shadow: 0 4px 10px rgba(255, 255, 255, 0.3);
+    cursor: pointer;
+}
+.card img {
+    width: 100%; /* Prend toute la largeur */
+    height: 75%; /* Ajuster pour l'image */
+    object-fit: cover; /* Assure que l'image couvre bien */
+    display: block;
+    border-top-left-radius: 6px; /* Arrondi seulement en haut */
+    border-top-right-radius: 6px;
+}
+.card .card-name {
+    font-weight: bold;
+    padding: 4px 0; /* Espace autour du nom */
+    width: 100%;
+    background-color: rgba(44, 62, 80, 0.7); /* Fond semi-transparent pour le nom */
+    color: white; /* Texte blanc pour le nom */
+    font-size: 0.85em;
+    position: absolute; /* Positionné en bas */
+    bottom: 0;
+}
+.card-back { /* Style pour le dos de carte */
+    font-size: 3em; /* Gros '?' */
+    font-weight: bold;
+    color: #7f8c8d;
+    background: linear-gradient(135deg, #bdc3c7, #95a5a6); /* Dégradé pour le dos */
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 6px; /* Arrondi hérité */
+}
+.card.hidden .card-name, .card.hidden img { display: none; }
+.card.revealed {
+    opacity: 0.5;
+    border: 2px dashed #7f8c8d;
+    transform: rotate(15deg) scale(0.9); /* Incline et réduit la carte perdue */
+}
+.opponent-cards .card-back, .opponent-cards .revealed-card {
+    width: 35px; /* Cartes adversaires un peu plus grandes */
+    height: 55px;
+    font-size: 0.8em;
+    border-radius: 4px;
+    line-height: normal; /* Pas besoin de centrer le '?' */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative; /* Pour le nom */
+}
+.opponent-cards .revealed-card {
+    color: #333; /* Texte sombre sur fond clair */
+    font-weight: normal;
+    overflow: hidden;
+}
+.opponent-cards .revealed-card img { height: 60%; max-width: 90%; margin-bottom: 0; }
+.opponent-cards .revealed-card .card-name { font-size: 0.7em; padding: 1px 0; background: none; color: white; position: absolute; bottom: 1px; left:0; right: 0;}
+
+
+/* Zone Boutons d'Action */
+#action-buttons {
+    justify-content: flex-start; /* Aligne les boutons en haut */
+    gap: 8px;
+    overflow-y: auto;
+    padding: 15px; /* Plus de padding */
+}
+.action-btn {
+    background-color: #5F9EA0; /* Cadet Blue */
+    color: white;
+    border: none;
+    padding: 12px 10px; /* Plus de padding vertical */
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    text-align: left;
+    font-size: 1em; /* Taille normale */
+    width: 100%; /* Prend toute la largeur */
+    box-sizing: border-box; /* Inclut padding dans la largeur */
+}
+.action-btn i { margin-left: 8px; color: #f1c40f; } /* Icône pièce plus visible */
+.action-btn:hover { background-color: #7AC5CD; }
+.action-btn:disabled { background-color: #7f8c8d; cursor: not-allowed; opacity: 0.7; }
+.role-action { background-color: #8A2BE2; } /* Violet */
+.role-action:hover { background-color: #9370DB; }
+#action-buttons hr {
+    border: none;
+    border-top: 1px solid #7f8c8d;
+    margin: 10px 0;
 }
 
-/* Styles pour les éléments du jeu (à ajouter plus tard) */
-/* .player-info { ... } */
-/* .cards-display { ... } */
-/* .action-buttons { ... } */
+/* Zone Journal de Jeu */
+#game-log {
+    overflow-y: auto;
+    justify-content: flex-start; /* Commence en haut */
+}
+#game-log h4 { margin-top: 0; text-align: center; border-bottom: 1px solid #7f8c8d; padding-bottom: 5px; position: sticky; top: 0; background: #34495e; z-index: 1;}
+#log-list { list-style: none; padding: 0 5px; margin: 0; font-size: 0.9em; }
+#log-list li { padding: 4px 5px; border-bottom: 1px dotted #566573; }
+#log-list li:last-child { border-bottom: none; }
+#log-list li:nth-child(odd) { background-color: rgba(0, 0, 0, 0.1); }
 

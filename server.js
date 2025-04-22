@@ -1,13 +1,11 @@
-// server.js - v6 (Corrigé et Complet)
+// server.js - v7 avec gestion du blocage pour Aide Étrangère
 
 // --- Importations ---
-const express = require("express"); // Framework web
-const http = require("http"); // Module HTTP natif de Node
-const path = require("path"); // Gestion des chemins de fichiers
-const { Server } = require("socket.io"); // Classe Server de Socket.IO
-const fs = require("fs"); // Module File System pour lire JSON
-
-// Importe les classes depuis notre fichier de logique
+const express = require("express");
+const http = require("http");
+const path = require("path");
+const { Server } = require("socket.io");
+const fs = require("fs");
 const { Deck, Card } = require("./game/logic.js"); // Importe Deck ET Card
 
 // --- Chargement Configuration ---
@@ -16,39 +14,32 @@ try {
 	const rawData = fs.readFileSync(path.join(__dirname, "cards.json"));
 	gameConfig = JSON.parse(rawData);
 	console.log("✅ Configuration du jeu (cards.json) chargée.");
-	// Valider la config ici si besoin (ex: vérifier que gameConfig.roles existe)
 	if (
 		!gameConfig ||
 		!Array.isArray(gameConfig.roles) ||
 		!Array.isArray(gameConfig.generalActions)
 	) {
-		throw new Error("Structure de cards.json invalide (manque roles ou generalActions).");
+		throw new Error("Structure de cards.json invalide.");
 	}
 } catch (error) {
-	console.error("❌ ERREUR FATALE: Impossible de charger ou parser cards.json !", error);
-	process.exit(1); // Arrête si la config est inutilisable
+	console.error("❌ ERREUR FATALE: Impossible de charger cards.json !", error);
+	process.exit(1);
 }
 
 // --- Initialisation Serveur ---
-const app = express(); // Crée l'application Express (MANQUANT PRÉCÉDEMMENT)
-const server = http.createServer(app); // Crée le serveur HTTP à partir d'Express
-const io = new Server(server, {
-	// Initialise Socket.IO
-	cors: {
-		origin: "*", // À restreindre en production
-		methods: ["GET", "POST"],
-	},
-});
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*", methods: ["GET", "POST"] } });
 
 // --- Constantes & Stockage ---
 const PORT = process.env.PORT || 3000;
 const MIN_PLAYERS_PER_LOBBY = 2;
-const MAX_PLAYERS_PER_LOBBY = 6; // Ajuster si besoin selon les règles finales
+const MAX_PLAYERS_PER_LOBBY = 6;
 const STARTING_COINS = 2;
 const CARDS_PER_PLAYER = 2;
+const REACTION_TIMEOUT_MS = 15000; // Temps en ms pour réagir (contester/bloquer) - 15 secondes
 
-// Stockage des Lobbies en mémoire
-const lobbies = {}; // { lobbyName: { players: [...], gameState: {...} } }
+const lobbies = {}; // { lobbyName: { players: [...], gameState: {..., reactionTimer: null} } }
 
 // --- Fonctions Utilitaires ---
 
@@ -83,7 +74,6 @@ function determineStartingPlayer(players) {
 	const randomIndex = Math.floor(Math.random() * players.length);
 	return players[randomIndex].id;
 }
-
 /**
  * Récupère les infos d'une carte depuis gameConfig.
  * @param {string} cardId
@@ -91,7 +81,25 @@ function determineStartingPlayer(players) {
  */
 function getCardInfo(cardId) {
 	return gameConfig.roles.find((role) => role.id === cardId) || null;
-	// On pourrait utiliser "new Card(gameConfig.roles.find...)" si on voulait un objet Card
+}
+
+/**
+ * Vérifie si un joueur possède au moins une carte d'une faction donnée.
+ * @param {object} player - L'objet joueur (avec player.influence contenant les IDs).
+ * @param {string} factionId - L'ID de la faction à vérifier.
+ * @returns {boolean} True si le joueur a une carte de cette faction, false sinon.
+ */
+function playerHasFaction(player, factionId) {
+	if (!player || !player.influence || !factionId) return false;
+	// Itère sur les cartes (IDs) du joueur
+	for (const cardId of player.influence) {
+		const cardInfo = getCardInfo(cardId);
+		// Vérifie si la carte existe et appartient à la bonne faction
+		if (cardInfo && cardInfo.faction === factionId) {
+			return true; // Trouvé !
+		}
+	}
+	return false; // Aucune carte de cette faction trouvée
 }
 
 /**
@@ -105,10 +113,9 @@ function getInitialGameStateForPlayer(lobby, playerId) {
 	if (!player || !lobby.gameState || !lobby.gameState.deckManager) return null;
 	return {
 		myId: playerId,
-		myInfluenceIds: player.influence, // Ses cartes !
+		myInfluenceIds: player.influence,
 		myCoins: player.coins,
 		players: lobby.players.map((p) => ({
-			// Infos publiques des autres
 			id: p.id,
 			name: p.name,
 			coins: p.coins,
@@ -120,7 +127,6 @@ function getInitialGameStateForPlayer(lobby, playerId) {
 		discardPileIds: lobby.gameState.discardPile,
 	};
 }
-
 /**
  * Construit l'état public du jeu (visible par tous).
  * @param {object} lobby
@@ -140,42 +146,128 @@ function getPublicGameState(lobby) {
 		currentTurnState: lobby.gameState.currentTurnState,
 		deckCardCount: lobby.gameState.deckManager.cardsRemaining(),
 		discardPileIds: lobby.gameState.discardPile,
-		declaredAction: lobby.gameState.declaredAction, // Action en cours de résolution
+		declaredAction: lobby.gameState.declaredAction,
 	};
 }
 
 /**
+ * Tente de résoudre l'action déclarée (appelée après timeout ou si phase C/B terminée sans blocage).
+ * @param {string} lobbyName - Le nom du lobby.
+ */
+function resolveDeclaredAction(lobbyName) {
+	const lobby = lobbies[lobbyName];
+	// Vérifie si l'action est toujours en attente de résolution
+	if (
+		!lobby ||
+		lobby.gameState.status !== "playing" ||
+		lobby.gameState.currentTurnState !== "AWAITING_CHALLENGE_OR_BLOCK"
+	) {
+		// Peut arriver si un blocage/challenge a déjà résolu l'action entre temps
+		console.log(
+			`[${lobbyName}] Tentative de résolution d'action annulée (état: ${lobby?.gameState?.currentTurnState})`
+		);
+		return;
+	}
+
+	const action = lobby.gameState.declaredAction;
+	if (!action) {
+		console.error(`[${lobbyName}] Erreur: Tentative de résolution sans action déclarée.`);
+		// Peut-être passer au tour suivant par sécurité?
+		nextTurn(lobbyName);
+		return;
+	}
+
+	const actor = lobby.players.find((p) => p.id === action.actorId);
+	if (!actor) {
+		console.error(
+			`[${lobbyName}] Erreur: Acteur de l'action ${action.type} introuvable.`
+		);
+		nextTurn(lobbyName);
+		return;
+	}
+
+	console.log(
+		`[${lobbyName}] Résolution de l'action ${action.type} pour ${actor.name} (pas de blocage/contestation).`
+	);
+
+	// Appliquer l'effet de l'action
+	let actionSuccessful = false;
+	switch (action.type) {
+		case "foreign_aid":
+			actor.coins += 2;
+			console.log(` -> ${actor.name} reçoit Aide Étrangère (+2). Total: ${actor.coins}`);
+			io.to(lobbyName).emit("game_message", `${actor.name} reçoit l'Aide Étrangère.`);
+			actionSuccessful = true;
+			break;
+		// --- Ajouter ici la résolution des autres actions ---
+		// case 'tax':
+		//     actor.coins += 3;
+		//     console.log(` -> ${actor.name} reçoit Taxe (+3). Total: ${actor.coins}`);
+		//     io.to(lobbyName).emit('game_message', `${actor.name} collecte la Taxe.`);
+		//     actionSuccessful = true;
+		//     break;
+		// case 'steal': ... etc ...
+
+		default:
+			console.error(
+				`[${lobbyName}] Erreur: Type d'action inconnu lors de la résolution: ${action.type}`
+			);
+			// Ne rien faire et passer au tour suivant?
+			break;
+	}
+
+	// Nettoyer l'action déclarée et passer au tour suivant
+	lobby.gameState.declaredAction = null;
+	// On met à jour l'état AVANT de passer au tour suivant
+	io.to(lobbyName).emit("game_update", getPublicGameState(lobby));
+	nextTurn(lobbyName);
+}
+
+/**
  * Passe au joueur suivant actif.
- * @param {string} lobbyName
+ * @param {string} lobbyName - Le nom du lobby.
  */
 function nextTurn(lobbyName) {
 	const lobby = lobbies[lobbyName];
-	if (!lobby || !lobby.gameState || lobby.gameState.status !== "playing") return;
+	// Vérifications initiales (lobby existe, jeu en cours)
+	if (
+		!lobby ||
+		!lobby.gameState ||
+		!["playing", "finished"].includes(lobby.gameState.status)
+	)
+		return;
+
+	// Nettoie le timer de réaction précédent s'il existe
+	if (lobby.gameState.reactionTimer) {
+		clearTimeout(lobby.gameState.reactionTimer);
+		lobby.gameState.reactionTimer = null;
+	}
+
+	// Si la partie est déjà finie, ne rien faire de plus
+	if (lobby.gameState.status === "finished") return;
 
 	const activePlayers = lobby.players.filter((p) => p.influence.length > 0);
 	if (activePlayers.length <= 1) {
 		lobby.gameState.status = "finished";
 		const winner = activePlayers[0];
 		console.log(
-			`🏁 Fin de partie dans ${lobbyName}. Gagnant: ${winner ? winner.name : "Personne?"}`
+			`🏁 Fin de partie [${lobbyName}]. Gagnant: ${winner ? winner.name : "Personne?"}`
 		);
 		io.to(lobbyName).emit("game_over", {
 			winner: winner ? { id: winner.id, name: winner.name } : null,
 		});
+		// Supprimer le lobby après un délai?
+		// setTimeout(() => { delete lobbies[lobbyName]; }, 60000); // Ex: 1 minute
 		return;
 	}
 
 	const currentPlayerIndex = activePlayers.findIndex(
 		(p) => p.id === lobby.gameState.currentPlayerId
 	);
-	// Gère le cas où le joueur courant n'est plus actif (devrait pas arriver si appelé au bon moment)
 	const nextPlayerIndex =
-		currentPlayerIndex === -1
-			? 0 // Si joueur courant inactif, on repart du premier actif
-			: (currentPlayerIndex + 1) % activePlayers.length;
-
+		currentPlayerIndex === -1 ? 0 : (currentPlayerIndex + 1) % activePlayers.length;
 	lobby.gameState.currentPlayerId = activePlayers[nextPlayerIndex].id;
-	lobby.gameState.currentTurnState = "AWAITING_ACTION";
+	lobby.gameState.currentTurnState = "AWAITING_ACTION"; // Prêt pour la nouvelle action
 	lobby.gameState.declaredAction = null;
 	lobby.gameState.declaredBlock = null;
 	lobby.gameState.challengeInfo = null;
@@ -192,50 +284,41 @@ function nextTurn(lobbyName) {
 // --- Configuration Express ---
 // Servir les fichiers statiques du dossier 'public'
 app.use(express.static(path.join(__dirname, "public")));
-
 // Route pour la page d'accueil
-app.get("/", (req, res) => {
-	res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
+app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
 // Route pour les règles
-app.get("/rules", (req, res) => {
-	res.sendFile(path.join(__dirname, "public", "rules.html"));
-});
+app.get("/rules", (req, res) =>
+	res.sendFile(path.join(__dirname, "public", "rules.html"))
+);
 
 // --- Logique Socket.IO ---
 io.on("connection", (socket) => {
 	console.log(`🟢 Joueur connecté : ${socket.id}`);
-	socket.emit("game_config", gameConfig); // Envoie la config au client
+	socket.emit("game_config", gameConfig);
 
 	// --- Rejoindre un Lobby ---
 	socket.on("join_lobby", ({ playerName, lobbyName }) => {
-		// Validation entrées
 		if (!playerName || !lobbyName || playerName.length > 20 || lobbyName.length > 20) {
-			socket.emit("lobby_error", "Pseudo ou nom de lobby invalide.");
+			socket.emit("lobby_error", "Pseudo/Lobby invalide.");
 			return;
 		}
-		// Création lobby si besoin
 		if (!lobbies[lobbyName]) {
 			lobbies[lobbyName] = { players: [], gameState: { status: "waiting" } };
 			console.log(`✨ Lobby "${lobbyName}" créé.`);
 		}
 		const lobby = lobbies[lobbyName];
-		// Validations (plein, pseudo, état)
 		if (lobby.players.length >= MAX_PLAYERS_PER_LOBBY) {
-			socket.emit("lobby_error", "Ce lobby est plein !");
+			socket.emit("lobby_error", "Lobby plein !");
 			return;
 		}
 		if (lobby.players.some((p) => p.name === playerName)) {
-			socket.emit("lobby_error", "Ce pseudo est déjà pris.");
+			socket.emit("lobby_error", "Pseudo déjà pris.");
 			return;
 		}
 		if (lobby.gameState.status !== "waiting") {
-			socket.emit("lobby_error", "Partie déjà commencée.");
+			socket.emit("lobby_error", "Partie commencée.");
 			return;
 		}
-
-		// Ajout joueur
 		const newPlayer = {
 			id: socket.id,
 			name: playerName,
@@ -245,10 +328,8 @@ io.on("connection", (socket) => {
 		};
 		lobby.players.push(newPlayer);
 		socket.join(lobbyName);
-		socket.lobbyName = lobbyName; // Stocke pour retrouver à la déconnexion
+		socket.lobbyName = lobbyName;
 		socket.playerName = playerName;
-
-		// Confirmation + update
 		const lobbyData = {
 			lobbyName: lobbyName,
 			players: lobby.players.map((p) => ({ id: p.id, name: p.name })),
@@ -256,12 +337,10 @@ io.on("connection", (socket) => {
 			isHost: lobby.players.length === 1,
 		};
 		socket.emit("lobby_joined", lobbyData);
-		socket
-			.to(lobbyName)
-			.emit("update_lobby", {
-				players: lobby.players.map((p) => ({ id: p.id, name: p.name })),
-			});
-		console.log(`👍 [${socket.id}] ("${playerName}") a rejoint le lobby "${lobbyName}".`);
+		socket.to(lobbyName).emit("update_lobby", {
+			players: lobby.players.map((p) => ({ id: p.id, name: p.name })),
+		});
+		console.log(`👍 [${socket.id}] ("${playerName}") a rejoint [${lobbyName}].`);
 	});
 
 	// --- Démarrage de la Partie ---
@@ -310,7 +389,6 @@ io.on("connection", (socket) => {
 		console.log(`✅ Démarrage partie [${lobbyName}] par ${playerName}...`);
 		lobby.gameState.status = "playing";
 		try {
-			// Utilise la classe Deck qui valide les cartes à l'intérieur
 			lobby.gameState.deckManager = new Deck(gameConfig);
 		} catch (error) {
 			console.error(
@@ -331,8 +409,7 @@ io.on("connection", (socket) => {
 		lobby.gameState.declaredAction = null;
 		lobby.gameState.declaredBlock = null;
 		lobby.gameState.challengeInfo = null;
-
-		// Envoi état initial
+		lobby.gameState.reactionTimer = null; // Initialise le timer
 		console.log(`📢 Envoi état initial [${lobbyName}]...`);
 		lobby.players.forEach((player) => {
 			const initialState = getInitialGameStateForPlayer(lobby, player.id);
@@ -356,7 +433,6 @@ io.on("connection", (socket) => {
 		const playerId = socket.id;
 		if (!lobbyName || !lobbies[lobbyName]) return;
 		const lobby = lobbies[lobbyName];
-		// Validations (partie en cours, tour du joueur, état AWAITING_ACTION)
 		if (lobby.gameState.status !== "playing") return;
 		if (lobby.gameState.currentPlayerId !== playerId) {
 			socket.emit("game_error", "Pas votre tour.");
@@ -377,16 +453,35 @@ io.on("connection", (socket) => {
 		const player = lobby.players.find((p) => p.id === playerId);
 		if (!player) return;
 
-		let actionProcessed = false;
-		let requiresChallengeBlockPhase = false; // Mettre à true pour les actions contestables/blocables
+		let actionProcessed = false; // Action traitée (mais peut-être en attente de C/B)
+		let requiresChallengeBlockPhase = false;
 		let actionCost = 0;
 		const actionType = actionData.actionType;
-
-		// Vérifier si c'est une action générale
 		const generalActionInfo = gameConfig.generalActions.find((a) => a.id === actionType);
+		const roleActionInfo = gameConfig.roles.find((r) => r.actionType === actionType);
 
+		// --- Validation spécifique à l'action (coût, cible, etc.) ---
+		if (actionType === "coup") {
+			actionCost = generalActionInfo.cost;
+			const targetId = actionData.targetId;
+			const targetPlayer = lobby.players.find((p) => p.id === targetId);
+			if (player.coins < actionCost) {
+				socket.emit("game_error", `Pas assez d'or (coût: ${actionCost})`);
+				return;
+			}
+			if (!targetId || !targetPlayer || targetPlayer.influence.length === 0) {
+				socket.emit("game_error", "Cible invalide.");
+				return;
+			}
+			if (targetId === playerId) {
+				socket.emit("game_error", "Auto-coup interdit.");
+				return;
+			}
+		}
+		// Ajouter ici validations pour Assassin, etc.
+
+		// --- Traitement ---
 		if (generalActionInfo) {
-			// --- Traitement Actions Générales ---
 			switch (actionType) {
 				case "income":
 					player.coins += 1;
@@ -397,12 +492,9 @@ io.on("connection", (socket) => {
 					break;
 				case "foreign_aid":
 					console.log(` -> ${socket.playerName} déclare Aide Étrangère.`);
-					// !! Logique future: Phase de contestation/blocage !!
-					// Stocker l'action déclarée
 					lobby.gameState.declaredAction = { type: "foreign_aid", actorId: playerId };
-					// Changer l'état pour attendre les réactions
 					lobby.gameState.currentTurnState = "AWAITING_CHALLENGE_OR_BLOCK";
-					// Notifier les autres joueurs de l'opportunité
+					// Notifier opportunité + factions blocantes
 					io.to(lobbyName).emit("action_opportunity", {
 						actorName: player.name,
 						actionType: "foreign_aid",
@@ -410,8 +502,8 @@ io.on("connection", (socket) => {
 						// Qui peut bloquer? Utiliser blockedByFaction de generalActionInfo
 						canBeBlockedByFaction: generalActionInfo.blockedByFaction || [],
 					});
-					requiresChallengeBlockPhase = true; // Ne pas terminer le tour tout de suite
-					actionProcessed = true; // L'action est "en cours", pas terminée
+					requiresChallengeBlockPhase = true;
+					actionProcessed = true;
 					break;
 				case "coup":
 					actionCost = generalActionInfo.cost;
@@ -432,88 +524,172 @@ io.on("connection", (socket) => {
 					}
 
 					console.log(
-						` -> ${socket.playerName} lance Coup d'État sur ${targetPlayer.name}.`
+						` -> ${socket.playerName} lance Coup d'État sur ${actionData.targetId}.`
 					);
 					player.coins -= actionCost;
-					// !! Logique future: Demander à la cible quelle carte révéler !!
-					// Logique actuelle (simplifiée):
+					// Logique de perte d'influence (simplifiée)
 					if (targetPlayer.influence.length > 0) {
 						const lostCardId = targetPlayer.influence.pop();
 						targetPlayer.lostInfluence.push(lostCardId);
 						lobby.gameState.discardPile.push(lostCardId);
-						console.log(
-							` -> ${targetPlayer.name} perd ${lostCardId}. Restant: ${targetPlayer.influence.length}`
-						);
 						io.to(lobbyName).emit(
 							"game_message",
 							`${targetPlayer.name} perd une influence (Coup d'État) !`
 						);
 						if (targetPlayer.influence.length === 0) {
-							console.log(` -> ${targetPlayer.name} est éliminé !`);
 							io.to(lobbyName).emit("player_eliminated", {
-								playerId: targetId,
+								playerId: targetPlayer.id,
 								playerName: targetPlayer.name,
 							});
-							// Déclencher Croque-Mort ici ?
 						}
 					}
-					actionProcessed = true;
+					actionProcessed = true; // Coup est imparable, traité immédiatement
 					break;
 				default:
 					socket.emit("game_error", `Action générale inconnue: ${actionType}`);
 					return;
 			}
+		} else if (roleActionInfo) {
+			// --- Traitement Actions de Rôle ---
+			console.log(
+				` -> ${socket.playerName} déclare utiliser ${roleActionInfo.name} pour ${actionType}`
+			);
+			// Vérifier coût si applicable (ex: Assassin)
+			// ...
+			lobby.gameState.declaredAction = {
+				type: actionType,
+				actorId: playerId,
+				claimedCardId: roleActionInfo.id,
+				targetId: actionData.targetId,
+			};
+			lobby.gameState.currentTurnState = "AWAITING_CHALLENGE_OR_BLOCK";
+			// Notifier opportunité + factions blocantes + contestable
+			io.to(lobbyName).emit("action_opportunity", {
+				actorName: player.name,
+				actionType: actionType,
+				actionDescription: roleActionInfo.actionDescription,
+				claimedCardName: roleActionInfo.name,
+				targetName: actionData.targetId
+					? lobby.players.find((p) => p.id === actionData.targetId)?.name
+					: null,
+				canBeChallenged: true, // Les actions de rôle peuvent être contestées
+				canBeBlockedByFaction: roleActionInfo.counteredByFaction || [],
+			});
+			requiresChallengeBlockPhase = true;
+			actionProcessed = true;
 		} else {
-			// --- Traitement Actions de Rôle (à ajouter) ---
-			const roleActionInfo = gameConfig.roles.find((r) => r.actionType === actionType);
-			if (roleActionInfo) {
-				console.log(
-					` -> ${socket.playerName} déclare utiliser ${roleActionInfo.name} pour ${actionType}`
-				);
-				// !! Logique future: Phase de contestation/blocage !!
-				// Vérifier coût si applicable (ex: Assassin)
-				// Stocker l'action déclarée (avec carte prétendue = roleActionInfo.id)
-				lobby.gameState.declaredAction = {
-					type: actionType,
-					actorId: playerId,
-					claimedCardId: roleActionInfo.id, // Carte que le joueur prétend avoir
-					targetId: actionData.targetId, // Si l'action a une cible
-				};
-				lobby.gameState.currentTurnState = "AWAITING_CHALLENGE_OR_BLOCK";
-				// Notifier les autres
-				io.to(lobbyName).emit("action_opportunity", {
-					actorName: player.name,
-					actionType: actionType,
-					actionDescription: roleActionInfo.actionDescription,
-					claimedCardName: roleActionInfo.name,
-					targetName: actionData.targetId
-						? lobby.players.find((p) => p.id === actionData.targetId)?.name
-						: null,
-					canBeChallenged: true, // Les actions de rôle peuvent être contestées
-					canBeBlockedByFaction: roleActionInfo.counteredByFaction || [], // Factions qui contrent cette action
-				});
-				requiresChallengeBlockPhase = true;
-				actionProcessed = true; // Action "en cours"
-			} else {
-				socket.emit("game_error", `Type d'action totalement inconnu: ${actionType}`);
-				return;
-			}
+			socket.emit("game_error", `Type d'action totalement inconnu: ${actionType}`);
+			return;
 		}
 
-		// --- Fin du Tour ou Attente ---
+		// --- Suite : Fin du Tour ou Attente de Réaction ---
 		if (actionProcessed && !requiresChallengeBlockPhase) {
+			// Action terminée immédiatement (Income, Coup)
 			io.to(lobbyName).emit("game_update", getPublicGameState(lobby));
 			nextTurn(lobbyName);
 		} else if (requiresChallengeBlockPhase) {
-			io.to(lobbyName).emit("game_update", getPublicGameState(lobby)); // Met à jour l'état (ex: AWAITING_CHALLENGE_OR_BLOCK)
+			// Action en attente de contestation/blocage
+			io.to(lobbyName).emit("game_update", getPublicGameState(lobby));
 			console.log(
-				`[${lobbyName}] Action ${actionType} déclarée. Attente de réactions...`
+				`[${lobbyName}] Action ${actionType} déclarée. Attente de réactions (${REACTION_TIMEOUT_MS}ms)...`
 			);
-			// Mettre en place un timer ici ?
+			// Démarre le timer pour résoudre l'action si personne ne réagit
+			lobby.gameState.reactionTimer = setTimeout(() => {
+				console.log(`[${lobbyName}] Timeout pour ${actionType}. Résolution...`);
+				resolveDeclaredAction(lobbyName);
+			}, REACTION_TIMEOUT_MS);
 		}
 	});
 
-	// --- Autres gestionnaires (challenge, block, etc. à ajouter) ---
+	// --- Gestion du Blocage ---
+	socket.on("player_block", (blockData) => {
+		const lobbyName = socket.lobbyName;
+		const blockerId = socket.id;
+		if (!lobbyName || !lobbies[lobbyName]) return;
+		const lobby = lobbies[lobbyName];
+		const blockerPlayer = lobby.players.find((p) => p.id === blockerId);
+
+		// Validations
+		if (lobby.gameState.status !== "playing") return;
+		if (lobby.gameState.currentTurnState !== "AWAITING_CHALLENGE_OR_BLOCK") {
+			socket.emit("game_error", "Pas le moment de bloquer.");
+			return;
+		}
+		if (!lobby.gameState.declaredAction) {
+			socket.emit("game_error", "Aucune action à bloquer.");
+			return;
+		}
+		if (lobby.gameState.declaredAction.actorId === blockerId) {
+			socket.emit("game_error", "Vous ne pouvez pas bloquer votre propre action.");
+			return;
+		}
+		if (!blockerPlayer) return;
+
+		const actionType = lobby.gameState.declaredAction.type;
+		let requiredFaction = null;
+
+		// Détermine quelle faction est nécessaire pour bloquer CETTE action
+		if (actionType === "foreign_aid") {
+			const faInfo = gameConfig.generalActions.find((a) => a.id === "foreign_aid");
+			// Note: blockedByFaction est un tableau, on prend le premier pour l'instant (simplification)
+			// Il faudrait gérer le cas où plusieurs factions peuvent bloquer
+			requiredFaction = faInfo.blockedByFaction ? faInfo.blockedByFaction[0] : null; // Ex: 'perceptrices'
+			if (!requiredFaction) {
+				socket.emit("game_error", "Cette action ne peut pas être bloquée.");
+				return;
+			}
+		}
+		// Ajouter ici la logique pour déterminer la faction requise pour bloquer les actions de rôle
+		// else {
+		//     const roleInfo = gameConfig.roles.find(r => r.actionType === actionType);
+		//     requiredFaction = roleInfo.counteredByFaction ? roleInfo.counteredByFaction[0] : null;
+		// }
+
+		if (!requiredFaction) {
+			console.warn(
+				`[${lobbyName}] Pas de faction requise trouvée pour bloquer ${actionType}`
+			);
+			return; // Ne devrait pas arriver si la config est bonne
+		}
+
+		console.log(
+			`[${lobbyName}] ${blockerPlayer.name} tente de bloquer ${actionType} (nécessite ${requiredFaction}).`
+		);
+
+		// Vérifier si le joueur a la faction requise
+		if (playerHasFaction(blockerPlayer, requiredFaction)) {
+			console.log(` -> Blocage VALIDE par ${blockerPlayer.name} !`);
+			// Annuler le timer de résolution automatique
+			if (lobby.gameState.reactionTimer) {
+				clearTimeout(lobby.gameState.reactionTimer);
+				lobby.gameState.reactionTimer = null;
+				console.log(` -> Timer annulé.`);
+			}
+
+			// Annoncer le blocage
+			// TODO: Permettre de contester le blocage ! Pour l'instant, on considère réussi.
+			io.to(lobbyName).emit(
+				"game_message",
+				`${blockerPlayer.name} bloque l'action ${actionType} !`
+			);
+			lobby.gameState.declaredAction = null; // L'action est annulée
+
+			// Mettre à jour et passer au tour suivant
+			io.to(lobbyName).emit("game_update", getPublicGameState(lobby));
+			nextTurn(lobbyName);
+		} else {
+			console.log(
+				` -> Blocage INVALIDE par ${blockerPlayer.name} (n'a pas la faction ${requiredFaction}).`
+			);
+			socket.emit(
+				"game_error",
+				`Vous n'avez pas de carte de la faction ${requiredFaction} pour bloquer.`
+			);
+			// On ignore simplement la tentative de blocage invalide, le timer continue.
+		}
+	});
+
+	// --- Autres gestionnaires (challenge, etc. à ajouter) ---
 
 	// --- Déconnexion ---
 	socket.on("disconnect", () => {
@@ -528,35 +704,31 @@ io.on("connection", (socket) => {
 				console.log(
 					`👋 Joueur "${leavingPlayerName}" retiré de [${lobbyName}]. Restants: ${lobby.players.length}`
 				);
-
 				if (lobby.players.length === 0 && lobby.gameState.status !== "playing") {
-					// Ne supprime que si vide ET pas en jeu? Ou toujours?
 					delete lobbies[lobbyName];
 					console.log(`🗑️ Lobby [${lobbyName}] vide supprimé.`);
 				} else {
-					// Informer les autres joueurs du départ
 					io.to(lobbyName).emit("update_lobby", {
 						players: lobby.players.map((p) => ({ id: p.id, name: p.name })),
 					});
-					// Si la partie était en cours...
 					if (lobby.gameState.status === "playing") {
 						io.to(lobbyName).emit(
 							"game_message",
 							`⚠️ ${leavingPlayerName} a quitté la partie.`
 						);
-						// Si c'était son tour, passer au suivant
 						if (lobby.gameState.currentPlayerId === socket.id) {
-							console.log(` -> C'était son tour, passage au suivant.`);
-							nextTurn(lobbyName); // nextTurn gère aussi la fin de partie si besoin
+							nextTurn(lobbyName);
 						}
-						// Vérifier si la partie doit se terminer s'il reste moins de 2 joueurs
 						const activePlayers = lobby.players.filter((p) => p.influence.length > 0);
-						if (activePlayers.length < MIN_PLAYERS_PER_LOBBY) {
-							// Peut-être attendre un peu avant de déclarer la fin? Ou finir direct?
+						if (
+							activePlayers.length < MIN_PLAYERS_PER_LOBBY &&
+							activePlayers.length > 0
+						) {
+							// Fin si moins de 2 mais plus de 0
 							console.log(
 								` -> Moins de ${MIN_PLAYERS_PER_LOBBY} joueurs restants, fin de partie.`
 							);
-							nextTurn(lobbyName); // nextTurn gère la fin si <= 1 joueur actif
+							nextTurn(lobbyName);
 						}
 					}
 				}
@@ -567,5 +739,7 @@ io.on("connection", (socket) => {
 
 // --- Démarrage du Serveur ---
 server.listen(PORT, () => {
-	console.log(`🚀 Serveur Complot (v6 - Complet) démarré sur http://localhost:${PORT}`);
+	console.log(
+		`🚀 Serveur Complot (v7 - Blocage FA) démarré sur http://localhost:${PORT}`
+	);
 });
