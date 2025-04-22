@@ -11,7 +11,7 @@ const { Deck, Card } = require("./game/logic.js"); // Importe Deck ET Card
 // --- Chargement Configuration ---
 let gameConfig;
 try {
-	const rawData = fs.readFileSync(path.join(__dirname, "cards.json"));
+	const rawData = fs.readFileSync(path.join(__dirname, "public/cards.json"));
 	gameConfig = JSON.parse(rawData);
 	console.log("✅ Configuration du jeu (cards.json) chargée.");
 	if (
@@ -290,6 +290,10 @@ app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "index.ht
 app.get("/rules", (req, res) =>
 	res.sendFile(path.join(__dirname, "public", "rules.html"))
 );
+app.get('/cards', (req, res) => {
+    // Assure-toi que 'gallery.html' (le fichier créé précédemment) existe dans 'public'
+    res.sendFile(path.join(__dirname, 'public', 'cards.html'));
+});
 
 // --- Logique Socket.IO ---
 io.on("connection", (socket) => {

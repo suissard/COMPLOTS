@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Complot - Galerie des Cartes</title>
+    <style>
+        /* Styles généraux */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #34495e; /* Fond sombre */
+            color: #ecf0f1; /* Texte clair */
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: #e74c3c; /* Rouge Complot */
+            margin-bottom: 30px;
+        }
+        /* Conteneur pour les cartes */
+        .card-gallery {
+            display: flex;
+            flex-wrap: wrap; /* Passage à la ligne */
+            justify-content: center; /* Centre les cartes */
+            gap: 20px; /* Espace entre les cartes */
+        }
+        /* Style individuel des cartes */
+        .card-display {
+            background-color: #ecf0f1; /* Fond clair */
+            color: #2c3e50; /* Texte sombre */
+            border: 1px solid #bdc3c7;
+            border-radius: 10px;
+            padding: 15px;
+            width: 250px; /* Largeur fixe pour chaque carte */
+            box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.2s ease-in-out;
+        }
+        .card-display:hover {
+            transform: scale(1.03); /* Léger zoom au survol */
+        }
+        .card-display img {
+            max-width: 100%;
+            height: 150px; /* Hauteur fixe pour l'image */
+            object-fit: contain; /* Ajuste l'image sans déformer */
+            border-radius: 6px;
+            margin-bottom: 10px;
+            background-color: #ffffff; /* Fond blanc si image transparente */
+            border: 1px solid #bdc3c7;
+        }
+        .card-display h3 {
+            margin: 10px 0 5px 0;
+            color: #c0392b; /* Nom en rouge */
+            text-align: center;
+            font-size: 1.2em;
+        }
+        .card-display .faction {
+            font-style: italic;
+            color: #7f8c8d; /* Gris pour la faction */
+            text-align: center;
+            margin-bottom: 15px;
+            font-size: 0.9em;
+        }
+        .card-display p {
+            margin: 5px 0;
+            font-size: 0.9em;
+            line-height: 1.4;
+        }
+        .card-display strong { /* Met en évidence les mots clés */
+            color: #2980b9; /* Bleu */
+        }
+        .card-display hr {
+            border: none;
+            border-top: 1px dashed #bdc3c7;
+            margin: 10px 0;
+        }
+        /* Couleurs spécifiques par faction (optionnel) */
+        .faction-assassins { border-top: 5px solid #c0392b; }
+        .faction-thieves { border-top: 5px solid #f39c12; }
+        .faction-negotiators { border-top: 5px solid #27ae60; }
+        /* .faction-nobility { border-top: 5px solid #8e44ad; } */ /* Noblesse n'existe plus */
+        .faction-untouchables { border-top: 5px solid #e74c3c; } /* Rouge clair */
+        .faction-perceptrices { border-top: 5px solid #d8aed8; } /* Rose/Violet clair */
+
+    </style>
+</head>
+<body>
+
+    <h1>Galerie des Cartes Complot</h1>
+
+    <div class="card-gallery" id="cardGallery">
+        <p>Chargement des cartes...</p>
+    </div>
+
+    <script>
+        // Récupère le conteneur de la galerie
+        const gallery = document.getElementById('cardGallery');
+
+        // Fonction pour générer le HTML d'une carte (inchangée)
+        function createCardHTML(card) {
+            const cardDiv = document.createElement('div');
+            cardDiv.classList.add('card-display');
+            cardDiv.classList.add(`faction-${card.faction}`);
+
+            const img = document.createElement('img');
+
+            console.log("card", card.imageUrl)
+
+            img.src = card.imageUrl || 'https://placehold.co/200x150/eeeeee/cccccc?text=Image?';
+            img.alt = card.name;
+            // img.onerror = function() { this.onerror=null; this.src='https://placehold.co/200x150/eeeeee/cccccc?text=Image+Erreur'; };
+            cardDiv.appendChild(img);
+
+            const name = document.createElement('h3');
+            name.textContent = card.name;
+            cardDiv.appendChild(name);
+
+            const faction = document.createElement('p');
+            faction.classList.add('faction');
+            // Gère le cas où la faction est inconnue
+            const factionName = card.faction ? card.faction.charAt(0).toUpperCase() + card.faction.slice(1) : 'Inconnue';
+            faction.textContent = `Clan des ${factionName}`;
+            cardDiv.appendChild(faction);
+
+            if (card.actionDescription) {
+                const actionDesc = document.createElement('p');
+                actionDesc.innerHTML = `<strong>Action :</strong> ${card.actionDescription}`;
+                cardDiv.appendChild(actionDesc);
+            }
+            if (card.triggeredActionDescription) {
+                const triggeredDesc = document.createElement('p');
+                triggeredDesc.innerHTML = `<strong>Effet Déclenché :</strong> ${card.triggeredActionDescription}`;
+                cardDiv.appendChild(triggeredDesc);
+            }
+            if (card.blockDescription) {
+                const blockDesc = document.createElement('p');
+                blockDesc.innerHTML = `<strong>Blocage :</strong> ${card.blockDescription}`;
+                cardDiv.appendChild(blockDesc);
+            }
+            if (card.counteredByFaction && card.counteredByFaction.length > 0) {
+                const counteredDesc = document.createElement('p');
+                 // Met la première lettre de chaque faction en majuscule
+                const counteredFactionsFormatted = card.counteredByFaction.map(f => f.charAt(0).toUpperCase() + f.slice(1));
+                counteredDesc.innerHTML = `<strong>Contré par :</strong> Clan des ${counteredFactionsFormatted.join(', Clan des ')}`;
+                cardDiv.appendChild(counteredDesc);
+            }
+            return cardDiv;
+        }
+
+        // --- Chargement des données depuis cards.json ---
+        fetch('/cards.json') // Chemin vers ton fichier JSON dans le dossier public
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json(); // Convertit la réponse en JSON
+            })
+            .then(gameConfig => {
+                // Efface le message "Chargement..."
+                gallery.innerHTML = '';
+
+                // Génère et ajoute chaque carte à la galerie
+                if (gameConfig && gameConfig.roles && Array.isArray(gameConfig.roles)) {
+                    gameConfig.roles.forEach(cardData => {
+                        try {
+                            const cardElement = createCardHTML(cardData);
+                            gallery.appendChild(cardElement);
+                        } catch (error) {
+                            console.error("Erreur lors de la création de la carte HTML:", cardData.id, error);
+                            // Affiche une carte d'erreur si une carte spécifique pose problème
+                            const errorCard = document.createElement('div');
+                            errorCard.classList.add('card-display');
+                            errorCard.innerHTML = `<h3>Erreur Carte</h3><p>Impossible d'afficher la carte ID: ${cardData.id || 'inconnu'}</p><p><small>${error.message}</small></p>`;
+                            gallery.appendChild(errorCard);
+                        }
+                    });
+                } else {
+                    throw new Error("Format de cards.json invalide (propriété 'roles' manquante ou non-tableau).");
+                }
+            })
+            .catch(error => {
+                console.error('Erreur lors du chargement de cards.json:', error);
+                gallery.innerHTML = `<p style="color: #e74c3c; text-align: center;">Erreur : Impossible de charger les données des cartes depuis /cards.json. Vérifiez la console pour plus de détails.</p>`;
+            });
+
+    </script>
+
+</body>
+</html>
