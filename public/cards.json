@@ -2,7 +2,7 @@
   "roles": [
     {
       "id": "duke",
-      "name": "Duc",
+      "name": "La duchesse",
       "faction": "perceptrices",
       "actionDescription": "Prendre 3 pièces (Taxe)",
       "actionType": "TAX",
@@ -66,7 +66,7 @@
     },
     {
       "id": "contessa",
-      "name": "Contessa",
+      "name": "La comtesse",
       "faction": "untouchables",
       "actionDescription": null,
       "actionType": null,
