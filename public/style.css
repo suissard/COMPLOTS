@@ -1,4 +1,4 @@
-/* public/style.css - v3 avec effet 3D et dos de carte personnalisé */
+/* public/style.css - v4 avec effet pression sur hover */
 
 /* --- Styles Globaux & Lobby --- */
 body {
@@ -109,7 +109,7 @@ input[type="text"]:focus { outline: none; border-color: #3498db; box-shadow: 0 0
 #block-button { background-color: #3498db; } #block-button:hover { background-color: #2980b9; }
 
 /* Zone Joueur */
-#player-area { justify-content: center; align-items: center; gap: 15px; border-top: 1px solid #7f8c8d; padding-top: 15px; /* Ajout de perspective pour l'effet 3D des cartes enfants */ perspective: 1000px; }
+#player-area { justify-content: center; align-items: center; gap: 15px; border-top: 1px solid #7f8c8d; padding-top: 15px; perspective: 1000px; }
 #player-info { font-size: 1.2em; font-weight: bold; }
 #my-coins .coin-count { color: #f1c40f; margin-left: 3px; }
 #my-cards { display: flex; justify-content: center; gap: 15px; }
@@ -121,50 +121,48 @@ input[type="text"]:focus { outline: none; border-color: #3498db; box-shadow: 0 0
     text-align: center; background-color: #ecf0f1; color: #333; font-size: 0.9em;
     position: relative; overflow: hidden; box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
     cursor: default;
-    /* Ajout pour effet 3D */
     transform-style: preserve-3d;
-    transition: transform 0.1s linear, box-shadow 0.2s ease; /* Transition plus rapide pour le tilt */
+    /* Transition plus douce pour tous les effets */
+    transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
 }
-/* Applique la transformation 3D via des variables CSS (gérées par JS) */
-.card.my-card:hover { /* Effet de survol seulement sur nos cartes */
-     transform: rotateX(var(--rotateX, 0deg)) rotateY(var(--rotateY, 0deg)) translateZ(10px); /* Ajoute un léger Z */
-     box-shadow: 0 10px 20px rgba(0,0,0,0.4);
+
+/* Effet 3D + Pression au survol de NOS cartes */
+.card.my-card:hover {
+     /* Combine la rotation (via JS) avec scale et translateZ pour l'effet pression */
+     transform: rotateX(var(--rotateX, 0deg)) rotateY(var(--rotateY, 0deg)) translateZ(5px) scale(0.97); /* Légèrement enfoncé et réduit */
+     box-shadow: 0 5px 15px rgba(0,0,0,0.3); /* Ombre un peu réduite */
 }
+
 .card img { width: 100%; height: 75%; object-fit: cover; display: block; border-top-left-radius: 6px; border-top-right-radius: 6px; }
 .card .card-name { font-weight: bold; padding: 4px 0; width: 100%; background-color: rgba(44, 62, 80, 0.7); color: white; font-size: 0.85em; position: absolute; bottom: 0; }
 
 /* Style pour le DOS de carte */
 .card-back {
     width: 100%; height: 100%;
-    background-image: url('/images/cards/back.png'); /* Utilise l'image back.png */
-    background-size: cover; /* Couvre toute la surface */
+    background-image: url('/images/cards/back.png');
+    background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
-    border-radius: 6px; /* Hérite de l'arrondi de .card */
-    /* Suppression des anciens styles de '?' et dégradé */
-    /* font-size: 3em; font-weight: bold; color: #7f8c8d; */
-    /* background: linear-gradient(135deg, #bdc3c7, #95a5a6); */
-    /* display: flex; justify-content: center; align-items: center; */
+    border-radius: 6px;
 }
-.card.hidden .card-name, .card.hidden img { display: none; } /* Cache nom/image si carte cachée */
+.card.hidden .card-name, .card.hidden img { display: none; }
 .card.revealed { opacity: 0.5; border: 2px dashed #7f8c8d; transform: rotate(15deg) scale(0.9); }
 
 /* Cartes Adversaires */
 .opponent-cards .card-back, .opponent-cards .revealed-card {
     width: 35px; height: 55px; font-size: 0.8em; border-radius: 4px;
     display: flex; justify-content: center; align-items: center; position: relative;
-    overflow: hidden; /* Cache le nom qui dépasse */
+    overflow: hidden;
 }
-/* Applique aussi l'image de dos aux cartes adverses */
 .opponent-cards .card-back {
      background-image: url('/images/cards/back.png');
      background-size: cover;
      background-position: center;
-     color: transparent; /* Cache le '?' s'il restait */
+     color: transparent;
 }
 .opponent-cards .revealed-card { color: #333; font-weight: normal; }
 .opponent-cards .revealed-card img { height: 60%; max-width: 90%; margin-bottom: 0; }
-.opponent-cards .revealed-card .card-name-opponent { /* Nom spécifique pour adversaire */
+.opponent-cards .revealed-card .card-name-opponent {
     font-size: 0.7em; padding: 1px 0; background: rgba(44, 62, 80, 0.7); color: white;
     position: absolute; bottom: 1px; left:0; right: 0; text-align: center;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
